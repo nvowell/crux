@@ -44,6 +44,14 @@ struct ContentView: View {
                     core.update(.fetch)
                 }
             }
+            HStack {
+                ActionButton(label: "Start Interval", color: .blue) {
+                    core.update(.startInterval)
+                }
+                ActionButton(label: "clear Interval", color: .blue) {
+                    core.update(.clearInterval)
+                }
+            }
         }
     }
 }

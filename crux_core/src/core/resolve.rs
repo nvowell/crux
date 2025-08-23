@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use thiserror::Error;
 
 use crate::bridge::EffectId;
@@ -5,7 +7,7 @@ use crate::bridge::EffectId;
 // used in docs/internals/runtime.md
 // ANCHOR: resolve
 type ResolveOnce<Out> = Box<dyn FnOnce(Out) + Send>;
-type ResolveMany<Out> = Box<dyn Fn(Out) -> Result<(), ()> + Send>;
+type ResolveMany<Out> = Arc<dyn Fn(Out) -> Result<(), ()> + Send + Sync + 'static>;
 
 /// Resolve is a callback used to resolve an effect request and continue
 /// one of the capability Tasks running on the executor.
@@ -13,6 +15,15 @@ pub enum RequestHandle<Out> {
     Never,
     Once(ResolveOnce<Out>),
     Many(ResolveMany<Out>),
+}
+impl<Out: 'static> Clone for RequestHandle<Out> {
+    fn clone(&self) -> RequestHandle<Out> {
+        match self {
+            RequestHandle::Many(f) => RequestHandle::Many(f.clone()),
+            RequestHandle::Once(_) => panic!("Cannot clone RequestHandle::Once"),
+            RequestHandle::Never => panic!("Cannot clone RequestHandle::Never"),
+        }
+    }
 }
 // ANCHOR_END: resolve
 

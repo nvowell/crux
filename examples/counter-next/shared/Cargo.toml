@@ -20,6 +20,7 @@ async-sse = "5.1.0"
 chrono = { version = "0.4.41", features = ["serde"] }
 crux_core.workspace = true
 crux_http.workspace = true
+crux_time.workspace = true
 facet = { version = "0.28.0", features = ["chrono"] }
 futures = "0.3.31"
 log = { version = "0.4.27", optional = true }

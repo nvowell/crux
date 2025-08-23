@@ -4,11 +4,12 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-use crux_core::{Command, Request, command::RequestBuilder};
+use crux_core::{
+    Command, Request,
+    command::{RequestBuilder, StreamBuilder},
+};
 use futures::{
-    FutureExt,
-    channel::oneshot::{self, Sender},
-    select_biased,
+    channel::oneshot::{self, Sender}, select_biased, stream::once, FutureExt, Stream, StreamExt
 };
 
 use crate::{TimeRequest, TimeResponse, TimerId, get_timer_id};
@@ -20,6 +21,19 @@ pub enum TimerOutcome {
     Completed(CompletedTimerHandle),
     /// Timer was cleared early.
     Cleared,
+}
+
+/// Outcome of an interval tick.
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum IntervalOutcome {
+    Tick(IntervalTick),
+    Cleared,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct IntervalTick {
+    pub timer_id: TimerId,
+    pub instant: SystemTime,
 }
 
 /// Time capability API.
@@ -201,6 +215,63 @@ where
 
         (builder, handle)
     }
+
+    /// Ask the shell to emit ticks every `duration` until cleared.
+    ///
+    /// Returns the [`StreamBuilder`] and a [`TimerHandle`] for clearing.
+    pub fn interval(
+        duration: Duration,
+    ) -> (
+        StreamBuilder<Effect, Event, impl Stream<Item = IntervalOutcome>>,
+        TimerHandle,
+    ) {
+        let timer_id = get_timer_id();
+        let (sender, receiver) = oneshot::channel();
+
+        let handle = TimerHandle {
+            timer_id,
+            abort: sender,
+        };
+
+        let builder = StreamBuilder::new(move |ctx| {
+            let ticks = ctx.stream_from_shell(TimeRequest::Interval {
+                id: timer_id,
+                duration: duration.into(),
+            });
+
+            let cleared = {
+                let ctx = ctx.clone();
+                async move {
+                    if let Ok(cleared_id) = receiver.await {
+                        let TimeResponse::Cleared { .. } = ctx
+                            .request_from_shell(TimeRequest::Clear { id: cleared_id })
+                            .await
+                        else {
+                            panic!("Unexpected response to TimeRequest::Clear");
+                        };
+                    }
+                    IntervalOutcome::Cleared
+                }
+            };
+
+            ticks
+                .take_until(cleared)
+                .filter_map(|resp| async move {
+                    match resp {
+                        TimeResponse::Tick { id, instant } => {
+                            Some(IntervalOutcome::Tick(IntervalTick {
+                                timer_id: id,
+                                instant: instant.into(),
+                            }))
+                        }
+                        _ => None,
+                    }
+                })
+                .chain(once(async { IntervalOutcome::Cleared }))
+        });
+
+        (builder, handle)
+    }
 }
 
 /// A handle to a requested timer. Allows the timer to be cleared. The handle is safe to drop,
@@ -262,11 +333,11 @@ impl From<TimerHandle> for CompletedTimerHandle {
 
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
+    use std::time::{Duration, SystemTime};
 
     use crux_core::Request;
 
-    use super::{Time, TimerOutcome};
+    use super::{IntervalOutcome, Time, TimerOutcome};
     use crate::{TimeRequest, TimeResponse};
 
     enum Effect {
@@ -282,6 +353,7 @@ mod tests {
     #[derive(Debug, PartialEq)]
     enum Event {
         Elapsed(TimerOutcome),
+        Tick(IntervalOutcome),
     }
 
     #[test]
@@ -361,5 +433,67 @@ mod tests {
 
         drop(handle);
         assert!(cmd.is_done());
+    }
+
+    #[test]
+    fn interval_produces_multiple_ticks_and_clears() {
+        let (stream, handle) = Time::interval(Duration::from_secs(1));
+        let mut stream = stream.then_send(Event::Tick);
+
+        // First tick
+        let Some(Effect::Time(mut req)) = stream.effects().next() else {
+            panic!("expected an effect");
+        };
+
+        let id = match req.operation {
+            TimeRequest::Interval { id, .. } => id,
+            _ => panic!("expected IntervalTick"),
+        };
+
+        req.resolve(TimeResponse::Tick {
+            id,
+            instant: SystemTime::now().into(),
+        })
+        .expect("resolve tick 1");
+
+        let event = stream.events().next();
+        assert!(matches!(event, Some(Event::Tick(_))));
+
+        // resolve another tick
+        req.resolve(TimeResponse::Tick {
+            id,
+            instant: SystemTime::now().into(),
+        })
+        .expect("resolve tick 2");
+
+        let event2 = stream.events().next();
+        assert!(matches!(event2, Some(Event::Tick(_))));
+
+        let id2 = match req.operation {
+            TimeRequest::Interval { id, .. } => id,
+            _ => panic!("expected IntervalTick"),
+        };
+        assert_eq!(id, id2);
+
+        // clear the interval timer
+        handle.clear();
+
+        let effect = stream.effects().next();
+        assert!(stream.events().next().is_none());
+
+        let Some(Effect::Time(mut req)) = effect else {
+            panic!("should get an effect");
+        };
+
+        let TimeRequest::Clear { id } = req.operation else {
+            panic!("expected a Clear request");
+        };
+
+        req.resolve(TimeResponse::Cleared { id })
+            .expect("should resolve");
+
+        let event = stream.events().next();
+
+        assert!(matches!(event, Some(Event::Tick(IntervalOutcome::Cleared))));
     }
 }

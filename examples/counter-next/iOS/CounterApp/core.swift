@@ -77,6 +77,8 @@ class Core: ObservableObject {
                     }
                 }
             }
+        case .time(_):
+            fatalError("Got a time request!")
         case .random(_):
             // FIXME: we should not have this branch, but typegen doesn't help us
             fatalError("Got a random request!")

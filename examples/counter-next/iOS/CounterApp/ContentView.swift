@@ -1,4 +1,3 @@
-import SharedTypes
 import SwiftUI
 
 struct ContentView: View {
@@ -26,6 +25,14 @@ struct ContentView: View {
             }
             ActionButton(label: "I'm feeling lucky", color: .purple) {
                 core.update(.random)
+            }
+            HStack {
+                ActionButton(label: "Start Interval", color: .blue) {
+                    core.update(.startInterval)
+                }
+                ActionButton(label: "Clear Interval", color: .orange) {
+                    core.update(.clearInterval)
+                }
             }
         }
     }

@@ -11,7 +11,11 @@ pub mod uniffi_ffi {
     };
     use crux_http::protocol::HttpRequest;
 
-    use crate::{App, middleware::RngMiddleware, sse::SseRequest};
+    use crate::{
+        App,
+        middleware::{RngMiddleware, TimeMiddleware},
+        sse::SseRequest,
+    };
 
     #[effect(facet_typegen)]
     pub enum Effect {
@@ -27,6 +31,7 @@ pub mod uniffi_ffi {
                 crate::Effect::Http(request) => Effect::Http(request),
                 crate::Effect::ServerSentEvents(request) => Effect::ServerSentEvents(request),
                 crate::Effect::Random(_) => panic!("Encountered a Random effect"),
+                crate::Effect::Time(_) => panic!("Encountered a Time effect"),
             }
         }
     }
@@ -45,7 +50,10 @@ pub mod uniffi_ffi {
     #[derive(uniffi::Object)]
     pub struct CoreFFI {
         core: Bridge<
-            MapEffectLayer<HandleEffectLayer<Core<App>, RngMiddleware>, Effect>,
+            MapEffectLayer<
+                HandleEffectLayer<HandleEffectLayer<Core<App>, RngMiddleware>, TimeMiddleware>,
+                Effect,
+            >,
             BincodeFfiFormat,
         >,
     }
@@ -57,6 +65,7 @@ pub mod uniffi_ffi {
         pub fn new(shell: Arc<dyn CruxShell>) -> Self {
             let core = Core::<App>::new()
                 .handle_effects_using(RngMiddleware::new())
+                .handle_effects_using(TimeMiddleware::new())
                 .map_effect::<Effect>()
                 .bridge::<BincodeFfiFormat>(move |effect_bytes| match effect_bytes {
                     Ok(effect) => shell.process_effects(effect),

@@ -1,6 +1,6 @@
 pub mod platform;
 
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
 
 use chrono::{DateTime, Utc};
 use crux_http::{command::Http, protocol::HttpRequest};
@@ -14,7 +14,7 @@ use crux_core::{
 };
 use crux_kv::{command::KeyValue, error::KeyValueError, KeyValueOperation};
 use crux_platform::PlatformRequest;
-use crux_time::{command::Time, TimeRequest};
+use crux_time::{command::{IntervalOutcome, IntervalTick, Time, TimerHandle}, TimeRequest};
 
 const CAT_LOADING_URL: &str = "https://c.tenor.com/qACzaJ1EBVYAAAAd/tenor.gif";
 const FACT_API_URL: &str = "https://catfact.ninja/fact";
@@ -33,12 +33,13 @@ impl CatFact {
     }
 }
 
-#[derive(Serialize, Deserialize, Default)]
+#[derive(Default)]
 pub struct Model {
     cat_fact: Option<CatFact>,
     cat_image: Option<CatImage>,
     platform: platform::Model,
     time: Option<String>,
+    interval_handle: Option<TimerHandle>,
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug)]
@@ -82,6 +83,11 @@ pub enum Event {
     SetFact(crux_http::Result<crux_http::Response<CatFact>>),
     #[serde(skip)]
     SetImage(crux_http::Result<crux_http::Response<CatImage>>),
+
+    StartInterval,
+    ClearInterval,
+    #[serde(skip)]
+    IntervalOutcome(IntervalOutcome),
 }
 
 #[derive(Default)]
@@ -124,10 +130,10 @@ impl App for CatFacts {
             Event::Clear => {
                 model.cat_fact = None;
                 model.cat_image = None;
-                let bytes = serde_json::to_vec(&model).unwrap();
+                //let bytes = serde_json::to_vec(&model).unwrap();
 
                 Command::all([
-                    KeyValue::set(KEY, bytes).then_send(|_| Event::None),
+                    //KeyValue::set(KEY, bytes).then_send(|_| Event::None),
                     render::render(),
                 ])
             }
@@ -163,11 +169,11 @@ impl App for CatFacts {
             Event::SetImage(Ok(mut response)) => {
                 model.cat_image = Some(response.take_body().unwrap());
 
-                let bytes = serde_json::to_vec(&model).unwrap();
+                //let bytes = serde_json::to_vec(&model).unwrap();
 
                 Command::all([
                     render::render(),
-                    KeyValue::set(KEY, bytes).then_send(|_| Event::None),
+                    //KeyValue::set(KEY, bytes).then_send(|_| Event::None),
                 ])
             }
             Event::SetFact(Err(_)) | Event::SetImage(Err(_)) | Event::SetState(Err(_)) => {
@@ -178,29 +184,35 @@ impl App for CatFacts {
                 let time: DateTime<Utc> = time.into();
                 model.time = Some(time.to_rfc3339_opts(chrono::SecondsFormat::Secs, true));
 
-                let bytes = serde_json::to_vec(&model).unwrap();
+                //let bytes = serde_json::to_vec(&model).unwrap();
 
                 Command::all([
                     render::render(),
-                    KeyValue::set(KEY, bytes).then_send(|_| Event::None),
+                    //KeyValue::set(KEY, bytes).then_send(|_| Event::None),
                 ])
             }
             Event::Restore => KeyValue::get(KEY).then_send(Event::SetState),
-            Event::SetState(Ok(Some(value))) => match serde_json::from_slice::<Model>(&value) {
-                Ok(m) => {
-                    *model = m;
-                    render::render()
+            Event::SetState(_) => Command::done(),
+            Event::None => Command::done(),
+            Event::StartInterval => {
+                let (command, handle) = Time::interval(Duration::from_secs(1));
+                model.interval_handle = Some(handle);
+                command.then_send(Event::IntervalOutcome)
+            }
+            Event::ClearInterval => {
+                if let Some(interval_handle) = model.interval_handle.take() {
+                    interval_handle.clear();
                 }
-                Err(_) => {
-                    // handle error
-                    Command::done()
-                }
-            },
-            Event::SetState(Ok(None)) => {
-                // no state to restore
                 Command::done()
             }
-            Event::None => Command::done(),
+            Event::IntervalOutcome(interval_outcome) => match interval_outcome {
+                IntervalOutcome::Tick(tick) => {
+                    Command::event(Event::CurrentTime(tick.instant))
+                }
+                IntervalOutcome::Cleared => {
+                    Command::done()
+                }
+            }
         }
     }
 

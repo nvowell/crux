@@ -17,6 +17,7 @@ pub enum TimeRequest {
     Now,
     NotifyAt { id: TimerId, instant: Instant },
     NotifyAfter { id: TimerId, duration: Duration },
+    Interval { id: TimerId, duration: Duration },
     Clear { id: TimerId },
 }
 
@@ -30,6 +31,7 @@ pub enum TimeResponse {
     Now { instant: Instant },
     InstantArrived { id: TimerId },
     DurationElapsed { id: TimerId },
+    Tick { id: TimerId, instant: Instant },
     Cleared { id: TimerId },
 }
 
