@@ -251,10 +251,15 @@ impl CodeGenerator {
 
         fs::create_dir_all(&path)?;
 
-        swift::Installer::new(&config.package_name, &path)
+        let installer = swift::Installer::new(&config.package_name, &path)
             .plugin(BincodePlugin)
-            .external_packages(&config.external_packages)
-            .generate(&self.0)?;
+            .external_packages(&config.external_packages);
+        let installer = if config.write_manifest {
+            installer
+        } else {
+            installer.without_manifest()
+        };
+        installer.generate(&self.0)?;
 
         Ok(())
     }
@@ -284,10 +289,15 @@ impl CodeGenerator {
         // remove any existing generated shared types, this ensures that we remove no longer used types
         fs::remove_dir_all(config.out_dir.join(&package_path)).unwrap_or(());
 
-        kotlin::Installer::new(&config.package_name, &config.out_dir)
+        let installer = kotlin::Installer::new(&config.package_name, &config.out_dir)
             .plugin(BincodePlugin)
-            .external_packages(&config.external_packages)
-            .generate(&self.0)?;
+            .external_packages(&config.external_packages);
+        let installer = if config.write_manifest {
+            installer
+        } else {
+            installer.without_manifest()
+        };
+        installer.generate(&self.0)?;
 
         Ok(())
     }
@@ -317,10 +327,15 @@ impl CodeGenerator {
         // remove any existing generated shared types, this ensures that we remove no longer used types
         fs::remove_dir_all(config.out_dir.join(&package_path)).unwrap_or(());
 
-        csharp::Installer::new(&config.package_name, &config.out_dir)
+        let installer = csharp::Installer::new(&config.package_name, &config.out_dir)
             .plugin(BincodePlugin)
-            .external_packages(&config.external_packages)
-            .generate(&self.0)?;
+            .external_packages(&config.external_packages);
+        let installer = if config.write_manifest {
+            installer
+        } else {
+            installer.without_manifest()
+        };
+        installer.generate(&self.0)?;
 
         Ok(())
     }
@@ -345,10 +360,15 @@ impl CodeGenerator {
         fs::create_dir_all(&config.out_dir)?;
         let output_dir = &config.out_dir;
 
-        typescript::Installer::new(&config.package_name, output_dir)
+        let installer = typescript::Installer::new(&config.package_name, output_dir)
             .plugin(BincodePlugin)
-            .external_packages(&config.external_packages)
-            .generate(&self.0)?;
+            .external_packages(&config.external_packages);
+        let installer = if config.write_manifest {
+            installer
+        } else {
+            installer.without_manifest()
+        };
+        installer.generate(&self.0)?;
 
         let ts_config_str = serde_json::to_string_pretty(&json!({
             "compilerOptions": {
