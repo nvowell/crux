@@ -24,8 +24,13 @@ anyhow = "1.0"
 facet = "=0.46.5"
 #facet_generate = "0.19"
 #facet-generate-attrs = "0.18"
-facet_generate = { path = "../facet-generate-0.20.0/crates/facet_generate" }
-facet-generate-attrs = { path = "../facet-generate-0.20.0/crates/facet-generate-attrs" }
+# grypt's patches to facet-generate, on nvowell/facet-generate's grypt-patches
+# branch. Pinned by rev rather than branch so a push there cannot change what
+# builds. A crate that also depends on facet-generate-attrs directly (grypt's
+# `shared` does) must name the same URL and rev, or Cargo builds two copies and
+# the attribute grammar stops matching.
+facet_generate = { git = "https://github.com/nvowell/facet-generate", rev = "3eb92c462557c287496e42c2d4fa6b0341705e13" }
+facet-generate-attrs = { git = "https://github.com/nvowell/facet-generate", rev = "3eb92c462557c287496e42c2d4fa6b0341705e13" }
 serde = "1.0"
 thiserror = "2.0"
 uniffi_bindgen = "=0.29.4"

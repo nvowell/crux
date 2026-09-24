@@ -776,6 +776,7 @@ dependencies = [
 [[package]]
 name = "facet-generate-attrs"
 version = "0.18.0"
+source = "git+https://github.com/nvowell/facet-generate?rev=3eb92c462557c287496e42c2d4fa6b0341705e13#3eb92c462557c287496e42c2d4fa6b0341705e13"
 dependencies = [
  "facet 0.46.5",
 ]
@@ -859,6 +860,7 @@ dependencies = [
 [[package]]
 name = "facet_generate"
 version = "0.20.0"
+source = "git+https://github.com/nvowell/facet-generate?rev=3eb92c462557c287496e42c2d4fa6b0341705e13#3eb92c462557c287496e42c2d4fa6b0341705e13"
 dependencies = [
  "derive_builder",
  "facet 0.46.5",
